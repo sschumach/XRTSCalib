@@ -100,7 +100,7 @@ def solve_E_x(data_points):
 
     initial_guess = [1000, 5000.0]  # Initial guesses for r_solution and x0_solution
     result = minimize(
-        residual, initial_guess, args=(data_points), method='SLSQP', options={'xtol': 1e-20, 'disp': False}
+        residual, initial_guess, args=(data_points), method='SLSQP'
     )  # Minimize the objective function
     r_solution_optimal, x0_solution_optimal = result.x  # Extract optimal parameters
     return r_solution_optimal, x0_solution_optimal
@@ -118,7 +118,7 @@ class CalibrationGUI(QMainWindow):
         self.setWindowTitle("Calibration Helper")
         self.setGeometry(200, 200, 1200, 600)  # Adjust width to fit peak list
         self.setFixedSize(1200, 600)
-        # self.setStyleSheet("background-color: lavender;")
+        self.setStyleSheet("background-color: lightgrey;")
         # Central widget to hold everything
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -149,7 +149,7 @@ class CalibrationGUI(QMainWindow):
 
         # Button to load spectra (smaller button)
         self.load_button = QPushButton("Load Spectra")
-        self.load_button.setStyleSheet("font-size: 16px;")
+        self.load_button.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #9bc363")
         self.load_button.setFixedSize(QSize(200, 40))  # Set smaller button size
         self.load_button.clicked.connect(self.load_spectra)
         left_layout.addWidget(self.load_button)
@@ -159,7 +159,7 @@ class CalibrationGUI(QMainWindow):
 
         # Button to calibrate (smaller button)
         self.calibrate_button = QPushButton("Calibrate")
-        self.calibrate_button.setStyleSheet("font-size: 16px; background-color: firebrick;")
+        self.calibrate_button.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #9b4065;")
         self.calibrate_button.setFixedSize(QSize(200, 80))  # Set smaller button size
         # self.calibrate_button.setStyleSheet("background-color: red;")
         self.calibrate_button.clicked.connect(self.calibrate)
@@ -182,7 +182,7 @@ class CalibrationGUI(QMainWindow):
         # List to display selected peaks
         self.peak_list = QListWidget()
         self.peak_list.setSpacing(-5)
-        self.peak_list.setStyleSheet("background-color: linen;")
+        self.peak_list.setStyleSheet("background-color: #e3bc81;")
         self.peak_list.setFixedSize(500, 250)  # Adjust width to make the list wider
         left_layout.addWidget(self.peak_list)
 
@@ -218,6 +218,13 @@ class CalibrationGUI(QMainWindow):
         self.ax.set_xlabel("Pixel position", fontsize=16)
         self.ax.set_ylabel("Intensity [arb. units]", fontsize=16)
         self.ax.grid(True)
+
+        self.textToConsole(r"<b>How does this GUI work?<b>")
+        self.textToConsole("1. Select the folder with your calibration spectra (.csv or .txt) by clicking on the \"Select Spectra\" button on top.\\")
+        self.textToConsole("2. For each of the spectra you want to use, first select the spectra file on the top and then select the corresponding peak in the graph on the right by drawing the region of interest.")
+        self.textToConsole("3. Select for each peak the corresponding energy in the dropdown menu right next to the entry in the \"Selected peaks\" widget.")
+        self.textToConsole("4. Once you selected all peaks you want to utilize for the calibration, click on \"Calibrate\".")
+        self.textToConsole("5. Save the calibration using the \"Save Calibration\" button.")
 
     def textToConsole(self, text):
         """Append text to the console."""
@@ -265,6 +272,7 @@ class CalibrationGUI(QMainWindow):
             spectrum[1] / np.nanmax(spectrum[1]),
             label=f"Spectrum {self.spectra_files[index]}",
             linewidth=1,
+            color = "C0"
         )
 
         # Add SpanSelector for peak selection
@@ -280,9 +288,12 @@ class CalibrationGUI(QMainWindow):
 
     def onselect(self, xmin, xmax):
         # Fit the selected region to a Lorentzian
-        lower_index = int(xmin)
-        upper_index = int(xmax)
-        peak_index = self.fit_lorentzian(lower_index, upper_index)
+        try:
+            lower_index = int(xmin)
+            upper_index = int(xmax)
+            peak_index = self.fit_lorentzian(lower_index, upper_index)
+        except:
+            return -1
 
         if peak_index is not None:
             # Draw vertical line for the selected peak
