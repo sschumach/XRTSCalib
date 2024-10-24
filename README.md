@@ -1,6 +1,6 @@
-# Calibration Helper Application
+# Calibration Helper
 
-This is a PyQt5-based GUI tool for spectral data calibration of spectrometers. The application allows users to load, visualize, and calibrate spectral data.
+This is a simple GUI tool for spectral data calibration of spectrometers. The application allows users to load, visualize, and calibrate spectral data.
 
 ## Installation
 
