@@ -128,7 +128,7 @@ class CalibrationGUI(QMainWindow):
         self.setWindowTitle("Calibration Helper")
         self.setGeometry(200, 200, 1200, 600)  # Adjust width to fit peak list
         self.setFixedSize(1200, 600)
-        self.setStyleSheet("background-color: lightgrey;")
+        self.setStyleSheet("background-color: #bbbbdd;")
         # Central widget to hold everything
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -160,7 +160,7 @@ class CalibrationGUI(QMainWindow):
         # Button to load spectra (smaller button)
         self.load_button = QPushButton("Load Spectra")
         self.load_button.setStyleSheet(
-            "font-size: 16px; font-weight: bold; background-color: #9bc363"
+            "font-size: 16px; font-weight: bold; background-color: #99aabb"
         )
         self.load_button.setFixedSize(QSize(200, 40))  # Set smaller button size
         self.load_button.clicked.connect(self.load_spectra)
@@ -172,7 +172,7 @@ class CalibrationGUI(QMainWindow):
         # Button to calibrate (smaller button)
         self.calibrate_button = QPushButton("Calibrate")
         self.calibrate_button.setStyleSheet(
-            "font-size: 16px; font-weight: bold; background-color: #9b4065;"
+            "font-size: 16px; font-weight: bold; background-color: #5577aa;"
         )
         self.calibrate_button.setFixedSize(QSize(200, 80))  # Set smaller button size
         # self.calibrate_button.setStyleSheet("background-color: red;")
@@ -196,7 +196,7 @@ class CalibrationGUI(QMainWindow):
         # List to display selected peaks
         self.peak_list = QListWidget()
         self.peak_list.setSpacing(-5)
-        self.peak_list.setStyleSheet("background-color: #e3bc81;")
+        self.peak_list.setStyleSheet("background-color: lightgrey;")
         self.peak_list.setFixedSize(500, 250)  # Adjust width to make the list wider
         left_layout.addWidget(self.peak_list)
 
@@ -652,7 +652,7 @@ class CalibrationGUI(QMainWindow):
         axs[0].plot(
             x,
             E_linear,
-            label=f"Linear fit: $E(x) = {slope:.4f}x + {intercept:.2f}$",
+            label=f"Linear fit: $E[ev](x) = {slope:.4f}x + {intercept:.2f}$",
             linestyle="--",
             color="g",
         )
