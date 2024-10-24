@@ -14,3 +14,8 @@ To install the dependencies for this project, follow the steps below:
 
    ```bash
    poetry install
+
+4. Run the GUI using the following command:
+
+   ```bash
+   poetry run python xrtscalib.py
