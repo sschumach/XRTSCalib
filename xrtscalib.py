@@ -4,6 +4,7 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QHBoxLayout,
@@ -84,12 +85,21 @@ h = 6.62607004e-34
 c = 299792458
 d = 3.135589312e-10  # d = 3.354e-10
 
+
 def residual(params, data_points):
     r_solution, x0_solution = params
     error = 0.0
+
+    sign = np.sign(
+        (data_points[0][1] - data_points[1][1])
+        / (data_points[0][0] - data_points[1][0])
+    )
     for E_data, x_data in data_points:
-        E_real = (((ureg.planck_constant * ureg.speed_of_light)) / (2 * d * ureg.meter) * np.sqrt(
-            1 + ((x0_solution + x_data) / (2*r_solution)) ** 2)).m_as(ureg.electron_volt)
+        E_real = sign * (
+            ((ureg.planck_constant * ureg.speed_of_light))
+            / (2 * d * ureg.meter * r_solution)
+            * np.sqrt(r_solution**2 + ((x0_solution + x_data) / (2)) ** 2)
+        ).m_as(ureg.electron_volt)
         error += (E_real - E_data) ** 2
 
     # print(r_solution, x0_solution, error)
@@ -100,7 +110,7 @@ def solve_E_x(data_points):
 
     initial_guess = [1000, 5000.0]  # Initial guesses for r_solution and x0_solution
     result = minimize(
-        residual, initial_guess, args=(data_points), method='SLSQP'
+        residual, initial_guess, args=(data_points), method="SLSQP"
     )  # Minimize the objective function
     r_solution_optimal, x0_solution_optimal = result.x  # Extract optimal parameters
     return r_solution_optimal, x0_solution_optimal
@@ -149,7 +159,9 @@ class CalibrationGUI(QMainWindow):
 
         # Button to load spectra (smaller button)
         self.load_button = QPushButton("Load Spectra")
-        self.load_button.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #9bc363")
+        self.load_button.setStyleSheet(
+            "font-size: 16px; font-weight: bold; background-color: #9bc363"
+        )
         self.load_button.setFixedSize(QSize(200, 40))  # Set smaller button size
         self.load_button.clicked.connect(self.load_spectra)
         left_layout.addWidget(self.load_button)
@@ -159,7 +171,9 @@ class CalibrationGUI(QMainWindow):
 
         # Button to calibrate (smaller button)
         self.calibrate_button = QPushButton("Calibrate")
-        self.calibrate_button.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #9b4065;")
+        self.calibrate_button.setStyleSheet(
+            "font-size: 16px; font-weight: bold; background-color: #9b4065;"
+        )
         self.calibrate_button.setFixedSize(QSize(200, 80))  # Set smaller button size
         # self.calibrate_button.setStyleSheet("background-color: red;")
         self.calibrate_button.clicked.connect(self.calibrate)
@@ -220,11 +234,21 @@ class CalibrationGUI(QMainWindow):
         self.ax.grid(True)
 
         self.textToConsole(r"<b>How does this GUI work?<b>")
-        self.textToConsole("1. Select the folder with your calibration spectra (.csv or .txt) by clicking on the \"Select Spectra\" button on top.\\")
-        self.textToConsole("2. For each of the spectra you want to use, first select the spectra file on the top and then select the corresponding peak in the graph on the right by drawing the region of interest.")
-        self.textToConsole("3. Select for each peak the corresponding energy in the dropdown menu right next to the entry in the \"Selected peaks\" widget.")
-        self.textToConsole("4. Once you selected all peaks you want to utilize for the calibration, click on \"Calibrate\".")
-        self.textToConsole("5. Save the calibration using the \"Save Calibration\" button.")
+        self.textToConsole(
+            '1. Select the folder with your calibration spectra (.csv or .txt) by clicking on the "Load Spectra" button on top.\\'
+        )
+        self.textToConsole(
+            '2. For each of the spectra you want to use, first select the spectra file on the top and then select the corresponding peak in the graph on the right by drawing the region of interest. You may delete peaks again by clicking "Delete".'
+        )
+        self.textToConsole(
+            '3. Select for each peak the corresponding energy in the dropdown menu right next to the entry in the "Selected peaks" widget.'
+        )
+        self.textToConsole(
+            '4. Once you selected all peaks you want to utilize for the calibration, click on "Calibrate".'
+        )
+        self.textToConsole(
+            "5. The calibration (consisting of px position - energy pairs) is automatically saved in the folder selected in step 1."
+        )
 
     def textToConsole(self, text):
         """Append text to the console."""
@@ -232,27 +256,42 @@ class CalibrationGUI(QMainWindow):
 
     def load_spectra(self):
         # Open folder dialog to select spectra folder
+
         folder_path = QFileDialog.getExistingDirectory(self, "Select Spectra Folder")
 
+        self.folder_path = folder_path
+
         if folder_path:
+
+            self.selected_peaks = []  # To store (file, peak_index, line_object)
+            self.peak_labels = []
+            self.current_spectrum_index = 0
+            self.state = {}  # Dictionary to hold the state for each spectrum file
             self.spectra_files.clear()
             self.spectra_data.clear()
             self.spectra_dropdown.clear()  # Clear any previous dropdown items
 
             for file in os.listdir(folder_path):
-                if file.endswith(".txt") or file.endswith(
-                    ".csv"
-                ):  # Assuming spectra are .txt files, change as needed
-                    file_path = os.path.join(folder_path, file)
-                    dataPx, dataI = np.genfromtxt(
-                        file_path, delimiter=",", unpack=True, skip_header=1
-                    )  # Load the spectra data
-                    self.spectra_files.append(file)
-                    self.spectra_data.append([range(0, len(dataI)), dataI])
-                    self.state[file] = {
-                        "peaks": [],
-                        "dropdowns": [],
-                    }  # Initialize state for each file
+
+                if "dispersion" not in file:
+                    if file.endswith(".txt") or file.endswith(
+                        ".csv"
+                    ):  # Assuming spectra are .txt files, change as needed
+                        file_path = os.path.join(folder_path, file)
+                        try:
+                            dataPx, dataI = np.genfromtxt(
+                                file_path, delimiter=",", unpack=True, skip_header=1
+                            )  # Load the spectra data
+                        except:
+                            dataPx, dataI = np.genfromtxt(
+                                file_path, unpack=True, skip_header=1
+                            )  # Load the spectra data
+                        self.spectra_files.append(file)
+                        self.spectra_data.append([range(0, len(dataI)), dataI])
+                        self.state[file] = {
+                            "peaks": [],
+                            "dropdowns": [],
+                        }  # Initialize state for each file
 
             # Populate the dropdown with the file names
             if self.spectra_files:
@@ -272,7 +311,7 @@ class CalibrationGUI(QMainWindow):
             spectrum[1] / np.nanmax(spectrum[1]),
             label=f"Spectrum {self.spectra_files[index]}",
             linewidth=1,
-            color = "C0"
+            color="C0",
         )
 
         # Add SpanSelector for peak selection
@@ -451,7 +490,10 @@ class CalibrationGUI(QMainWindow):
                 self.state[current_file]["dropdowns"].pop(index)
 
     def save_current_state(self):
-        current_file = self.spectra_files[self.current_spectrum_index]
+        try:
+            current_file = self.spectra_files[self.current_spectrum_index]
+        except:
+            return -1
         if current_file not in self.state:
             self.state[current_file] = {"peaks": [], "dropdowns": []}
 
@@ -468,7 +510,10 @@ class CalibrationGUI(QMainWindow):
         self.state[current_file]["dropdowns"] = dropdown_values
 
     def restore_state(self):
-        current_file = self.spectra_files[self.current_spectrum_index]
+        try:
+            current_file = self.spectra_files[self.current_spectrum_index]
+        except:
+            return -1
 
         # Clear existing selections and plot
         self.selected_peaks.clear()
@@ -538,6 +583,14 @@ class CalibrationGUI(QMainWindow):
                 #     f"Peak Position [x]: {peak_index:.2f}, Selected Energy: {selected_energy}"
                 # )
 
+        if len(positions) <= 1:
+            button = QMessageBox.warning(
+                self,
+                "Warning",
+                "At least 2 peaks needed for calibration!",
+                buttons=QMessageBox.Ok,
+            )
+            return -1
         # print(positions, energies)
         # print("#######################")
 
@@ -557,8 +610,11 @@ class CalibrationGUI(QMainWindow):
         x = range(len(self.spectra_data[0][1]))
 
         # Calculate corresponding E values using the average parameters
-        E_real = (((ureg.planck_constant * ureg.speed_of_light)) / (2 * d * ureg.meter) * np.sqrt(
-            1 + ((x0 + x) / (2*r)) ** 2)).m_as(ureg.electron_volt)
+        E_real = (
+            ((ureg.planck_constant * ureg.speed_of_light))
+            / (2 * d * ureg.meter * r)
+            * np.sqrt(r**2 + ((x0 + x) / (2)) ** 2)
+        ).m_as(ureg.electron_volt)
 
         # Linear fit for the three data points
         x_data = np.array([data[1] for data in data_points])
@@ -568,6 +624,16 @@ class CalibrationGUI(QMainWindow):
         slope, intercept = linear_fit
 
         E_linear = np.polyval(linear_fit, x)
+
+        np.savetxt(
+            self.folder_path + "/dispersion.txt",
+            np.column_stack((x, E_linear)),
+            delimiter=",",
+            header="Pixel position, Energy",
+        )
+
+        print('Calibration saved under "' + self.folder_path + '/dispersion.txt"')
+
         # dE_real = np.diff(E_real)
         # dE_linear = np.diff(E_linear)
 
@@ -576,7 +642,7 @@ class CalibrationGUI(QMainWindow):
         axs[0].plot(
             x,
             E_linear,
-            label=f"Linear ~ fit: $E(x) = {slope:.4f}x + {intercept:.2f}$",
+            label=f"Linear fit: $E(x) = {slope:.4f}x + {intercept:.2f}$",
             linestyle="--",
             color="g",
         )
@@ -631,6 +697,7 @@ class CalibrationGUI(QMainWindow):
         # fig.canvas.set_window_title('Calibration result')
         axs[1].legend(fontsize=12, bbox_to_anchor=(1.02, 1.05))
         plt.tight_layout()
+        fig.savefig(self.folder_path + "/dispersion_overview.png", dpi=300)
         plt.show()
 
 
