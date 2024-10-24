@@ -25,7 +25,7 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.figure import Figure
 from matplotlib.widgets import SpanSelector
 from scipy.optimize import curve_fit, minimize
-import scienceplots
+# import scienceplots
 
 import matplotlib.pyplot as plt
 
@@ -591,6 +591,16 @@ class CalibrationGUI(QMainWindow):
                 buttons=QMessageBox.Ok,
             )
             return -1
+
+        if len(set(energies))==1:
+            button = QMessageBox.warning(
+                self,
+                "Warning",
+                "Please select at least 2 different peak energies!",
+                buttons=QMessageBox.Ok,
+            )
+            return -1
+
         # print(positions, energies)
         # print("#######################")
 
@@ -694,7 +704,7 @@ class CalibrationGUI(QMainWindow):
         axs[0].set_title("Dispersion")
         axs[1].set_title("Calibrated spectra")
         axs[0].legend(fontsize=13)
-        # fig.canvas.set_window_title('Calibration result')
+        fig.canvas.manager.set_window_title("Calibration result")
         axs[1].legend(fontsize=12, bbox_to_anchor=(1.02, 1.05))
         plt.tight_layout()
         fig.savefig(self.folder_path + "/dispersion_overview.png", dpi=300)

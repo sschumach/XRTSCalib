@@ -1,0 +1,7 @@
+PyQt5
+numpy
+matplotlib
+scipy
+scienceplots
+setuptools
+pint
