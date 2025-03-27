@@ -1,20 +1,32 @@
-[tool.poetry]
+[project]
 name = "XRTSCalib"
 version = "0.1.0"
 description = "A simple GUI tool for creating dispersion curves for your favorite spectrometer from a set of calibration spectra."
-authors = ["Samuel Schumacher <samuel.schumacher@uni-rostock.de>"]
+authors = [
+  { name = "Samuel Schumacher", email = "samuel.schumacher@uni-rostock.de" }
+]
+readme = "README.md"
+requires-python = "^3.10,<3.14"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-numpy = "^1.24"
-pyqt5 = "=5.15.10"   
-pyqt5-qt5 = "=5.15.2"
-matplotlib = "^3.7"
-scipy = "^1.11"
-SciencePlots = "^1.0"
-pint = "^0.21"
-setuptools = "^68.0"
+dependencies = [
+  "numpy >=1.24",
+  "pyqt5 ==5.15.10",
+  "matplotlib >=3.7",
+  "scipy >=1.11",
+  "SciencePlots >=1.0",
+  "pint >=0.21"
+]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+black = "^24.10.0"
+flake8 = "^7.1.1"
+ipython = "^8.32.0"
 
 [build-system]
-requires = ["poetry-core>=1.0.0", "setuptools>=68.0"]
+requires = ["poetry-core>=2.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 79
+target-version = ['py310']
