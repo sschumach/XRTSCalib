@@ -24,6 +24,7 @@ from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT as NavigationToolbar,
 )
+from PyQt5.QtGui import QColor
 from matplotlib.figure import Figure
 from matplotlib.widgets import SpanSelector
 from scipy.optimize import curve_fit, minimize
@@ -118,7 +119,7 @@ def residual(params, data_points):
 
 def solve_E_x(data_points):
 
-    initial_guess = [400, 10000]  # Initial guesses for r_solution and x0_solution
+    initial_guess = [3000, 100]  # Initial guesses for r_solution and x0_solution
     result = minimize(
         residual, initial_guess, args=(data_points), method="SLSQP"
     )  # Minimize the objective function
@@ -136,7 +137,7 @@ class CalibrationGUI(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Calibration Helper")
+        self.setWindowTitle("XRTS Calibration Assistant")
         self.setGeometry(200, 200, 1200, 600)
         self.setFixedSize(1200, 600)
         self.setStyleSheet("background-color: #bbbbdd;")
@@ -350,6 +351,25 @@ class CalibrationGUI(QMainWindow):
             # Update the state with the new peak
             self.update_state_with_new_peak(peak_index)
 
+    def update_dropdown_appearance(self):
+        """Update the appearance of dropdown items based on whether they have peaks"""
+        for i in range(self.spectra_dropdown.count()):
+            file_name = self.spectra_dropdown.itemText(i)
+            if file_name in self.state and len(self.state[file_name]["peaks"]) > 0:
+                # File has peaks - set a colored background
+                self.spectra_dropdown.setItemData(
+                    i, 
+                    QColor("royalblue"), 
+                    Qt.BackgroundRole
+                )
+            else:
+                # File has no peaks - clear any background color
+                self.spectra_dropdown.setItemData(
+                    i, 
+                    QColor("#e6e6f5"), 
+                    Qt.BackgroundRole
+                )
+
     def update_state_with_new_peak(self, peak_index):
         current_file = self.spectra_files[self.current_spectrum_index]
 
@@ -362,7 +382,7 @@ class CalibrationGUI(QMainWindow):
         self.state[current_file]["dropdowns"].append(
             list(absorption_energy_list.keys())[0]
         )  # Default selection
-
+        self.update_dropdown_appearance()
     def fit_lorentzian(self, lower_index, upper_index):
         # Get the spectrum data in the selected range
         spectrum = self.spectra_data[self.current_spectrum_index]
@@ -439,6 +459,7 @@ class CalibrationGUI(QMainWindow):
         )  # Ensure proper size in QListWidget
         self.peak_list.addItem(list_item)
         self.peak_list.setItemWidget(list_item, peak_item_widget)
+        self.update_dropdown_appearance()
 
     def update_energy_state(self, peak_index, selected_energy, dropdown_widget=None):
         current_file = self.spectra_files[self.current_spectrum_index]
@@ -499,6 +520,7 @@ class CalibrationGUI(QMainWindow):
                         self.remove_peak_from_state(peak_index)
                         break
                 break
+        self.update_dropdown_appearance()
 
     def remove_peak_from_state(self, peak_index):
         current_file = self.spectra_files[self.current_spectrum_index]
@@ -509,6 +531,7 @@ class CalibrationGUI(QMainWindow):
                 # Remove the peak and the associated energy
                 self.state[current_file]["peaks"].pop(index)
                 self.state[current_file]["dropdowns"].pop(index)
+        self.update_dropdown_appearance()
 
     def save_current_state(self):
         try:
