@@ -226,7 +226,7 @@ class CalibrationGUI(QMainWindow):
 
         self.textToConsole(r"<b>How does this GUI work?<b>")
         self.textToConsole(
-            '1. Select the folder with your calibration spectra (.csv or .txt) by clicking on the "Load Spectra" button on top.\\'
+            '1. Select the folder with your calibration spectra (.csv or .txt) by clicking on the "Load Spectra" button on top.'
         )
         self.textToConsole(
             '2. For each of the spectra you want to use, first select the spectra file on the top and then select the corresponding peak in the graph on the right by drawing the region of interest. You may delete peaks again by clicking "Delete".'
@@ -238,7 +238,7 @@ class CalibrationGUI(QMainWindow):
             '4. Once you selected all peaks you want to utilize for the calibration, click on "Calibrate".'
         )
         self.textToConsole(
-            "5. The calibration (consisting of px position - energy pairs) is automatically saved in the folder selected in step 1."
+            "5. The calibration (consisting of px position - energy pairs) is saved in the folder selected in step 1 with the name prompted by the user."
         )
 
 
@@ -271,13 +271,17 @@ class CalibrationGUI(QMainWindow):
                     ):  # Assuming spectra are .txt files, change as needed
                         file_path = os.path.join(folder_path, file)
                         try:
-                            dataPx, dataI = np.genfromtxt(
-                                file_path, delimiter=",", unpack=True, skip_header=1
-                            )  # Load the spectra data
+                            try:
+                                dataPx, dataI = np.genfromtxt(
+                                    file_path, delimiter=",", unpack=True, skip_header=1
+                                )  # Load the spectra data
+                            except:
+                                dataPx, dataI = np.genfromtxt(
+                                    file_path, unpack=True, skip_header=1
+                                )  # Load the spectra data
                         except:
-                            dataPx, dataI = np.genfromtxt(
-                                file_path, unpack=True, skip_header=1
-                            )  # Load the spectra data
+                            # Do nothing if no file is found.
+                            return -1
                         self.spectra_files.append(file)
                         self.spectra_data.append([dataPx, dataI])
                         self.state[file] = {
