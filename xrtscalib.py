@@ -39,7 +39,7 @@ import pint
 
 ureg = pint.UnitRegistry()
 
-plt.style.use("science")
+#plt.style.use("science")
 
 colors_peaks = [
     "green",
@@ -64,6 +64,7 @@ colors_peaks = [
     "violet",
 ]
 
+# Some convenient absorption energies ...
 absorption_energy_list_ = {
     "Co-K-alpha2": 6915.538,
     "Co-K-alpha1": 6930.378,
@@ -130,7 +131,7 @@ def solve_E_x(data_points):
     params.add("r", value=50000, min=1, max=1000000)
     params.add("x0", value=0, min=-500000, max=500000)
 
-    # Perform minimization using Nelder-Mead
+    # Perform minimization using Differential Evolution
     result = minimize(
         residual, params, args=(data_points,), method="differential_evolution"
     )
@@ -371,16 +372,15 @@ class CalibrationGUI(QMainWindow):
             )
             self.canvas.draw()
 
-            # Add this selection to the list
             spectrum_file = self.spectra_files[self.current_spectrum_index]
             peak_entry = (
                 spectrum_file,
                 peak_index,
                 vertical_line,
-            )  # Store vertical line object
+            )  
             self.selected_peaks.append(peak_entry)
 
-            # Add the peak to the QListWidget
+            # Add the peak to the list
             self.add_peak_to_list(peak_index)
 
             # Update the state with the new peak
@@ -471,7 +471,6 @@ class CalibrationGUI(QMainWindow):
         peak_label = QLabel(f"Peak Position [px]: {index:.2f} ")
         layout.addWidget(peak_label)
 
-        # Dropdown (QComboBox) for selecting a value between 0 and 10
         dropdown = QComboBox()
         dropdown.addItems(absorption_energy_list.keys())
         dropdown.addItem("Custom")
@@ -653,7 +652,10 @@ class CalibrationGUI(QMainWindow):
 
     def calibrate(self):
 
-        # Inside your calibrate method, before saving the file
+        if len(self.state.items()) == 0:
+            print("Please select peaks, before calibrating.")
+            return -1
+
         filename, ok = QInputDialog.getText(
             self, "Save Calibration", "Enter filename (without extension):"
         )
@@ -663,12 +665,6 @@ class CalibrationGUI(QMainWindow):
         else:
             filename = filename.strip()
 
-        if len(self.state.items()) == 0:
-            print("Please select peaks, before calibrating.")
-            return -1
-
-        # print("#######################")
-        # print("Calibration Results:")
         positions = []
         energies = []
 
@@ -692,9 +688,6 @@ class CalibrationGUI(QMainWindow):
 
                 peak_index = peaks[i]
                 selected_energy = dropdowns[i] if i < len(dropdowns) else "N/A"
-                # print(
-                #     f"Peak Position [x]: {peak_index:.2f}, Selected Energy: {selected_energy}"
-                # )
 
         if len(positions) <= 1:
             button = QMessageBox.warning(
@@ -714,9 +707,6 @@ class CalibrationGUI(QMainWindow):
             )
             return -1
 
-        # print(positions, energies)
-        # print("#######################")
-
         data_points = [
             [absorption_energy_list[e], pos]
             for e, pos in zip(energies, positions)
@@ -728,10 +718,6 @@ class CalibrationGUI(QMainWindow):
         # Solve for r and x0 for the group of data points
         r, x0 = solve_E_x(data_points)
 
-        # Calculate the average values of r and x0
-        # average_r = np.mean(r_values)
-        # average_x0 = np.mean(x0_values)
-        # x = range(len(self.spectra_data[0][1]))
         x = self.spectra_data[self.current_spectrum_index][0]
         # Calculate corresponding E values using the average parameters
         E_real = (
@@ -740,7 +726,6 @@ class CalibrationGUI(QMainWindow):
             * np.sqrt(r**2 + ((x0 + x) / (2)) ** 2)
         ).m_as(ureg.electron_volt)
 
-        # Linear fit for the three data points
         x_data = np.array([data[1] for data in data_points])
         E_data = np.array([data[0] for data in data_points])
 
@@ -802,7 +787,7 @@ class CalibrationGUI(QMainWindow):
             axs[0].plot(
                 x,
                 E_quadratic,
-                label=f"Quadratic fit: $E[ev](x) = {a:.4f}x^2 + {b:.2f}x + {c:.2f}$",
+                label=f"Quadratic fit: E[eV](x) = ${a:.7f}x^2 + {b:.2f}x + {c:.2f}$",
                 linestyle="--",
                 color="g",
             )
@@ -871,7 +856,7 @@ class CalibrationGUI(QMainWindow):
         axs[1].set_ylabel("Intensity [arb. units]")
         axs[0].set_title("Dispersion")
         axs[1].set_title("Calibrated spectra")
-        axs[0].legend(fontsize=13, loc="upper right")
+        axs[0].legend(fontsize=9, loc="upper right")
         fig.canvas.manager.set_window_title("Calibration result")
         axs[1].legend(fontsize=12)
         plt.tight_layout()
