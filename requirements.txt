@@ -5,3 +5,4 @@ scipy
 scienceplots
 setuptools
 pint
+lmfit

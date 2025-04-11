@@ -14,7 +14,8 @@ dependencies = [
   "matplotlib (>=3.10.1)",
   "scipy (>=1.15.2)",
   "SciencePlots (>=2.1.1)",
-  "pint (>=0.24.4)"
+  "pint (>=0.24.4)",
+  "lmfit>=1.2.2"
 ]
 
 [tool.poetry.group.dev.dependencies]

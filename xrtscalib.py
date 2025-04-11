@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QToolBar,
     QTextEdit,
 )
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from PyQt5.QtCore import QSize, Qt
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas,
@@ -27,7 +28,9 @@ from matplotlib.backends.backend_qt5agg import (
 from PyQt5.QtGui import QColor
 from matplotlib.figure import Figure
 from matplotlib.widgets import SpanSelector
-from scipy.optimize import curve_fit, minimize
+from scipy.optimize import curve_fit
+from lmfit import minimize, Parameters
+
 # import scienceplots
 
 import matplotlib.pyplot as plt
@@ -73,58 +76,69 @@ absorption_energy_list_ = {
     "Cu-K-alpha2": 8027.842,
     "Cu-K-alpha1": 8047.823,
     "Cu-K-beta1": 8905.29,
-    "Zn-K-beta1" : 9572.0,
-    "Zn-K-alpha1" : 8639.0,
-    "Zn-K_alpha2" : 8616.0,
-    "LCLS_willow": 8165.0,
-    "LCLS_nick" : 10084.0
+    "Zn-K-beta1": 9572.0,
+    "Zn-K-alpha1": 8639.0,
+    "Zn-K_alpha2": 8616.0,
 }
 
 absorption_energy_list = {}
 
 for key in absorption_energy_list_.keys():
-    absorption_energy_list[key + ":  " + str(absorption_energy_list_[key]) + " eV"] = (
-        absorption_energy_list_[key]
-    )
+    absorption_energy_list[
+        key + ":  " + str(absorption_energy_list_[key]) + " eV"
+    ] = absorption_energy_list_[key]
 
 e = 1.60217662e-19
 h = 6.62607004e-34
 c = 299792458
 d = 3.135589312e-10  # d = 3.354e-10
 
+
 def getMinIndex(x, arr):
 
     res = np.abs(np.asarray(arr) - np.asarray(x))
     return min(range(len(res)), key=res.__getitem__)
 
-def residual(params, data_points):
-    r_solution, x0_solution = params
-    error = 0.0
 
-    sign = np.sign(
-        (data_points[0][1] - data_points[1][1])
-        / (data_points[0][0] - data_points[1][0])
-    )
+def residual(params, data_points):
+    r_solution = params["r"].value
+    x0_solution = params["x0"].value
+
+    residuals = []
+
+    # sign = np.sign(
+    #     (data_points[0][1] - data_points[1][1])
+    #     / (data_points[0][0] - data_points[1][0])
+    # )
+    sign = 1.0
+
     for E_data, x_data in data_points:
         E_real = sign * (
-            ((ureg.planck_constant * ureg.speed_of_light))
+            ((1 * ureg.planck_constant * 1 * ureg.speed_of_light))
             / (2 * d * ureg.meter * r_solution)
-            * np.sqrt(r_solution**2 + ((x0_solution + x_data) / (2)) ** 2)
+            * np.sqrt(r_solution**2 + ((x0_solution + x_data) / 2) ** 2)
         ).m_as(ureg.electron_volt)
-        error += (E_real - E_data) ** 2
 
-    # print(r_solution, x0_solution, error)
-    return error
+        residuals.append((E_real - E_data) / 10000.0)
+
+    return np.array(residuals)
 
 
 def solve_E_x(data_points):
 
-    initial_guess = [3000, 100]  # Initial guesses for r_solution and x0_solution
+    params = Parameters()
+    params.add("r", value=50000, min=1, max=1000000)
+    params.add("x0", value=0, min=-500000, max=500000)
+
+    # Perform minimization using Nelder-Mead
     result = minimize(
-        residual, initial_guess, args=(data_points), method="SLSQP"
-    )  # Minimize the objective function
-    
-    r_solution_optimal, x0_solution_optimal = result.x  # Extract optimal parameters
+        residual, params, args=(data_points,), method="differential_evolution"
+    )
+
+    # Extract optimal values
+    r_solution_optimal = result.params["r"].value
+    x0_solution_optimal = result.params["x0"].value
+
     return r_solution_optimal, x0_solution_optimal
 
 
@@ -152,7 +166,9 @@ class CalibrationGUI(QMainWindow):
         self.spectra_label.setStyleSheet("font-size: 16px;")
         self.spectra_dropdown = QComboBox()
         self.spectra_dropdown.setFixedSize(QSize(400, 40))
-        self.spectra_dropdown.currentIndexChanged.connect(self.on_spectrum_selected)
+        self.spectra_dropdown.currentIndexChanged.connect(
+            self.on_spectrum_selected
+        )
         label_dropdown_layout.addWidget(self.spectra_label)
         label_dropdown_layout.addWidget(self.spectra_dropdown)
         left_layout.addLayout(label_dropdown_layout)
@@ -192,7 +208,9 @@ class CalibrationGUI(QMainWindow):
         left_layout.addStretch(1)
 
         self.peak_list_label = QLabel("Selected peaks:")
-        self.peak_list_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.peak_list_label.setStyleSheet(
+            "font-size: 16px; font-weight: bold;"
+        )
         left_layout.addWidget(self.peak_list_label)
 
         self.peak_list = QListWidget()
@@ -241,7 +259,6 @@ class CalibrationGUI(QMainWindow):
             "5. The calibration (consisting of px position - energy pairs) is saved in the folder selected in step 1 with the name prompted by the user."
         )
 
-
     def textToConsole(self, text):
         """Append text to the console."""
         self.console.append(text)
@@ -249,16 +266,22 @@ class CalibrationGUI(QMainWindow):
     def load_spectra(self):
         # Open folder dialog to select spectra folder
 
-        folder_path = QFileDialog.getExistingDirectory(self, "Select Spectra Folder")
+        folder_path = QFileDialog.getExistingDirectory(
+            self, "Select Spectra Folder"
+        )
 
         self.folder_path = folder_path
 
         if folder_path:
 
-            self.selected_peaks = []  # To store (file, peak_index, line_object)
+            self.selected_peaks = (
+                []
+            )  # To store (file, peak_index, line_object)
             self.peak_labels = []
             self.current_spectrum_index = 0
-            self.state = {}  # Dictionary to hold the state for each spectrum file
+            self.state = (
+                {}
+            )  # Dictionary to hold the state for each spectrum file
             self.spectra_files.clear()
             self.spectra_data.clear()
             self.spectra_dropdown.clear()  # Clear any previous dropdown items
@@ -273,7 +296,10 @@ class CalibrationGUI(QMainWindow):
                         try:
                             try:
                                 dataPx, dataI = np.genfromtxt(
-                                    file_path, delimiter=",", unpack=True, skip_header=1
+                                    file_path,
+                                    delimiter=",",
+                                    unpack=True,
+                                    skip_header=1,
                                 )  # Load the spectra data
                             except:
                                 dataPx, dataI = np.genfromtxt(
@@ -324,10 +350,10 @@ class CalibrationGUI(QMainWindow):
     def onselect(self, xmin, xmax):
         # Fit the selected region to a Lorentzian
         spectrum_x = self.spectra_data[self.current_spectrum_index][0]
-    
+
         lower_index = getMinIndex(int(xmin), spectrum_x)
         upper_index = getMinIndex(int(xmax), spectrum_x)
-  
+
         try:
             peak_index = self.fit_lorentzian(lower_index, upper_index)
         except:
@@ -336,7 +362,12 @@ class CalibrationGUI(QMainWindow):
         if peak_index is not None:
             # Draw vertical line for the selected peak
             vertical_line = self.ax.axvline(
-                peak_index, color="black", linestyle="--", ymin=0, ymax=1, linewidth=2
+                peak_index,
+                color="black",
+                linestyle="--",
+                ymin=0,
+                ymax=1,
+                linewidth=2,
             )
             self.canvas.draw()
 
@@ -359,19 +390,18 @@ class CalibrationGUI(QMainWindow):
         """Update the appearance of dropdown items based on whether they have peaks"""
         for i in range(self.spectra_dropdown.count()):
             file_name = self.spectra_dropdown.itemText(i)
-            if file_name in self.state and len(self.state[file_name]["peaks"]) > 0:
+            if (
+                file_name in self.state
+                and len(self.state[file_name]["peaks"]) > 0
+            ):
                 # File has peaks - set a colored background
                 self.spectra_dropdown.setItemData(
-                    i, 
-                    QColor("royalblue"), 
-                    Qt.BackgroundRole
+                    i, QColor("royalblue"), Qt.BackgroundRole
                 )
             else:
                 # File has no peaks - clear any background color
                 self.spectra_dropdown.setItemData(
-                    i, 
-                    QColor("#e6e6f5"), 
-                    Qt.BackgroundRole
+                    i, QColor("#e6e6f5"), Qt.BackgroundRole
                 )
 
     def update_state_with_new_peak(self, peak_index):
@@ -387,6 +417,7 @@ class CalibrationGUI(QMainWindow):
             list(absorption_energy_list.keys())[0]
         )  # Default selection
         self.update_dropdown_appearance()
+
     def fit_lorentzian(self, lower_index, upper_index):
         # Get the spectrum data in the selected range
         spectrum = self.spectra_data[self.current_spectrum_index]
@@ -410,19 +441,22 @@ class CalibrationGUI(QMainWindow):
 
             # Check if the fitted center is within the selected region
             if np.min(x_data) <= fitted_center <= np.max(x_data):
-               
-                return (
-                    fitted_center  # Return the integer index of the fitted peak center
-                )
+
+                return fitted_center  # Return the integer index of the fitted peak center
             else:
                 print("Fit not successfull.")
                 raise ValueError  # Return None if the center is outside the selected range
         except (RuntimeError, ValueError):
             # Return None if the fit fails
-            res = x_data[lower_index] + x_data[np.nanargmax(
-                np.array(spectrum[1][lower_index:upper_index])
-            )]
-        
+            res = (
+                x_data[lower_index]
+                + x_data[
+                    np.nanargmax(
+                        np.array(spectrum[1][lower_index:upper_index])
+                    )
+                ]
+            )
+
             return res
 
     def add_peak_to_list(self, index):
@@ -446,13 +480,17 @@ class CalibrationGUI(QMainWindow):
 
         # Connect dropdown change to the update method
         dropdown.currentTextChanged.connect(
-            lambda: self.update_energy_state(index, dropdown.currentText(), dropdown_widget=dropdown)
+            lambda: self.update_energy_state(
+                index, dropdown.currentText(), dropdown_widget=dropdown
+            )
         )
 
         # Button to delete the peak
         delete_button = QPushButton("Delete")
         delete_button.setFixedSize(QSize(60, 25))  # Adjust size as needed
-        delete_button.clicked.connect(lambda: self.delete_peak(peak_item_widget, index))
+        delete_button.clicked.connect(
+            lambda: self.delete_peak(peak_item_widget, index)
+        )
         layout.addWidget(delete_button)
 
         # Set the layout and add it to the QListWidget
@@ -465,7 +503,9 @@ class CalibrationGUI(QMainWindow):
         self.peak_list.setItemWidget(list_item, peak_item_widget)
         self.update_dropdown_appearance()
 
-    def update_energy_state(self, peak_index, selected_energy, dropdown_widget=None):
+    def update_energy_state(
+        self, peak_index, selected_energy, dropdown_widget=None
+    ):
         current_file = self.spectra_files[self.current_spectrum_index]
 
         # If user selects "Custom", prompt for input
@@ -480,19 +520,24 @@ class CalibrationGUI(QMainWindow):
                 return  # User cancelled input
 
             selected_energy = f"Custom: {custom_value:.2f} eV"
-            
-            absorption_energy_list[f"Custom: {custom_value:.2f} eV"] = float(f"{custom_value:.2f}")
+
+            absorption_energy_list[f"Custom: {custom_value:.2f} eV"] = float(
+                f"{custom_value:.2f}"
+            )
 
             # Update the dropdown UI if a widget was passed
             if dropdown_widget is not None:
                 index = dropdown_widget.findText("Custom")
                 if index != -1:
-                    dropdown_widget.setItemText(index, f"Custom: {custom_value:.2f} eV")
+                    dropdown_widget.setItemText(
+                        index, f"Custom: {custom_value:.2f} eV"
+                    )
                 else:
                     dropdown_widget.addItem(selected_energy)
-                    dropdown_widget.setCurrentText(f"Custom: {custom_value:.2f} eV")
+                    dropdown_widget.setCurrentText(
+                        f"Custom: {custom_value:.2f} eV"
+                    )
                 self.canvas.draw()
-        
 
         # Update the state for the current file
         if current_file in self.state:
@@ -516,7 +561,9 @@ class CalibrationGUI(QMainWindow):
                 # Remove the corresponding peak data and vertical line
                 for peak in self.selected_peaks:
                     if peak[1] == peak_index:
-                        peak[2].remove()  # Remove the vertical line from the plot
+                        peak[
+                            2
+                        ].remove()  # Remove the vertical line from the plot
                         self.selected_peaks.remove(peak)
                         self.canvas.draw()  # Redraw the canvas without the removed line
 
@@ -546,14 +593,18 @@ class CalibrationGUI(QMainWindow):
             self.state[current_file] = {"peaks": [], "dropdowns": []}
 
         # Save peak positions (x) and associated vertical line information
-        self.state[current_file]["peaks"] = [peak[1] for peak in self.selected_peaks]
+        self.state[current_file]["peaks"] = [
+            peak[1] for peak in self.selected_peaks
+        ]
 
         # Save dropdown values
         dropdown_values = []
         for i in range(self.peak_list.count()):
             item = self.peak_list.item(i)
             widget = self.peak_list.itemWidget(item)
-            dropdown = widget.layout().itemAt(1).widget()  # Retrieve the dropdown
+            dropdown = (
+                widget.layout().itemAt(1).widget()
+            )  # Retrieve the dropdown
             dropdown_values.append(dropdown.currentText())
         self.state[current_file]["dropdowns"] = dropdown_values
 
@@ -595,13 +646,17 @@ class CalibrationGUI(QMainWindow):
             for i in range(self.peak_list.count()):
                 item = self.peak_list.item(i)
                 widget = self.peak_list.itemWidget(item)
-                dropdown = widget.layout().itemAt(1).widget()  # Retrieve the dropdown
+                dropdown = (
+                    widget.layout().itemAt(1).widget()
+                )  # Retrieve the dropdown
                 dropdown.setCurrentText(dropdowns[i])
 
     def calibrate(self):
 
         # Inside your calibrate method, before saving the file
-        filename, ok = QInputDialog.getText(self, "Save Calibration", "Enter filename (without extension):")
+        filename, ok = QInputDialog.getText(
+            self, "Save Calibration", "Enter filename (without extension):"
+        )
 
         if not ok or not filename.strip():
             filename = "dispersion"
@@ -625,7 +680,9 @@ class CalibrationGUI(QMainWindow):
             # print(f"\nFile: {spectrum_file}")
 
             if len(peaks) != len(dropdowns):
-                print("Warning: Number of peaks and dropdown selections do not match.")
+                print(
+                    "Warning: Number of peaks and dropdown selections do not match."
+                )
 
             # Print peak positions and selected energies
             for i in range(len(peaks)):
@@ -648,7 +705,7 @@ class CalibrationGUI(QMainWindow):
             )
             return -1
 
-        if len(set(energies))==1:
+        if len(set(energies)) == 1:
             button = QMessageBox.warning(
                 self,
                 "Warning",
@@ -661,7 +718,8 @@ class CalibrationGUI(QMainWindow):
         # print("#######################")
 
         data_points = [
-            [absorption_energy_list[e], pos] for e, pos in zip(energies, positions)
+            [absorption_energy_list[e], pos]
+            for e, pos in zip(energies, positions)
         ]
 
         r_values = []
@@ -699,11 +757,15 @@ class CalibrationGUI(QMainWindow):
                 header="Pixel position, Energy",
             )
 
-            print('Calibration saved under "' + self.folder_path + f'/{filename}.txt"')
+            print(
+                'Calibration saved under "'
+                + self.folder_path
+                + f'/{filename}.txt"'
+            )
 
             # dE_real = np.diff(E_real)
             # dE_linear = np.diff(E_linear)
-
+            deviation = E_real - E_linear
             fig, axs = plt.subplots(ncols=2, figsize=(13, 5))
 
             axs[0].plot(
@@ -726,11 +788,15 @@ class CalibrationGUI(QMainWindow):
                 header="Pixel position, Energy",
             )
 
-            print('Calibration saved under "' + self.folder_path + f'/{filename}.txt"')
+            print(
+                'Calibration saved under "'
+                + self.folder_path
+                + f'/{filename}.txt"'
+            )
 
             # dE_real = np.diff(E_real)
             # dE_linear = np.diff(E_linear)
-
+            deviation = E_real - E_quadratic
             fig, axs = plt.subplots(ncols=2, figsize=(13, 5))
 
             axs[0].plot(
@@ -741,15 +807,15 @@ class CalibrationGUI(QMainWindow):
                 color="g",
             )
 
-
-
         axs[0].plot(
             x,
             E_real,
-            label=r"Real: $E(x) = \frac{hc}{2rd} \sqrt{r^2 + \left(\frac{x_0 + x}{2}\right)^2}$",
+            label=r"Van Hamos Dispersion: $E(x) = \frac{hc}{2rd} \sqrt{r^2 + \left(\frac{x_0 + x}{2}\right)^2}$",
         )
 
-        axs[0].scatter(x_data, E_data, marker="x", color="r", s=20, label=r"Data")
+        axs[0].scatter(
+            x_data, E_data, marker="x", color="r", s=20, label=r"Data"
+        )
         axs[0].set_xlabel(r"Pixel position")
         axs[0].set_ylabel("Energy [eV]")
 
@@ -761,10 +827,14 @@ class CalibrationGUI(QMainWindow):
 
         for i, sp in enumerate(self.spectra_data):
             xv, yv = sp
-            for l, p in enumerate(self.state[list(self.state.keys())[i]]["peaks"]):
+            for l, p in enumerate(
+                self.state[list(self.state.keys())[i]]["peaks"]
+            ):
                 axs[1].axvline(
                     np.polyval(fit, p),
-                    label=self.state[list(self.state.keys())[i]]["dropdowns"][l],
+                    label=self.state[list(self.state.keys())[i]]["dropdowns"][
+                        l
+                    ],
                     color=colors_peaks[count],
                     linestyle="--",
                     ymin=0,
@@ -787,11 +857,21 @@ class CalibrationGUI(QMainWindow):
         axs[1].set_xlim(xlims[0], xlims[1])
         axs[1].grid(True)
 
+        axins = inset_axes(
+            axs[0], width="35%", height="25%", loc="lower left", borderpad=4
+        )
+        axins.plot(x, deviation, color="orange", label="Deviation")
+        axins.set_title("Deviation", fontsize=10)
+        axins.set_xlabel("Pixel", fontsize=8)
+        axins.set_ylabel(r"$\Lambda$E [eV]", fontsize=8)
+        axins.tick_params(axis="both", which="major", labelsize=5)
+        axins.grid(True)
+
         axs[1].set_xlabel(r"Energy [eV]")
         axs[1].set_ylabel("Intensity [arb. units]")
         axs[0].set_title("Dispersion")
         axs[1].set_title("Calibrated spectra")
-        axs[0].legend(fontsize=13)
+        axs[0].legend(fontsize=13, loc="upper right")
         fig.canvas.manager.set_window_title("Calibration result")
         axs[1].legend(fontsize=12)
         plt.tight_layout()
